@@ -65,3 +65,6 @@ venv
 # ctags
 tags
 
+.DS_Store
+safebrowsing_dump/test.db
+safebrowsing_dump/update_json.txt
