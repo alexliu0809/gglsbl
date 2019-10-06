@@ -73,7 +73,7 @@ class SafeBrowsingAPIClient(object):
 
 
     @autoretry
-    def get_threats_lists(self):
+    def _get_threats_lists(self):
         """Retrieve all available threat lists"""
         # response is googleapiclient.discovery.Resource object
         response = self.service.threatLists()
@@ -87,19 +87,60 @@ class SafeBrowsingAPIClient(object):
         return response['threatLists']
 
     @autoretry
-    def get_hash_prefix_cache(self):
-        """ Fetech 
+    def _get_hash_prefixes(self):
+        """ Fetech all the hash prefixes in all the lists. Put the all the lists in the listUpdateRequests part"""
+        
+        client_state = None
 
-    def fair_use_delay(self):
+        self._get_threats_update()
+
+    def _fair_use_delay(self):
         """ Delay the program to obey google fair use policy"""
         if self.next_request_no_sooner_than is not None and type(self.next_request_no_sooner_than) == int:
-            sleep_time = max(0, self.next_request_no_sooner_than - time.time())
+            sleep_time = max(0, self.next_request_no_sooner_than)
             log.info('Sleeping for {} seconds until next request.'.format(sleep_time))
             time.sleep(sleep_time)
 
+    def _set_wait_duration(self, minimum_wait_duration):
+        if minimum_wait_duration is None:
+            self.next_request_no_sooner_than = None
+            return
+        self.next_request_no_sooner_than = float(minimum_wait_duration.rstrip('s'))
 
 
-""" Example Response of Get Threats List
+    def dump_database(self):
+        """ The function that dumps the entire database """
+        response = self._get_threats_lists()
+        
+        # Use this respnse for fetching all hash prefixes for all lists.
+        # to test, just use one list.
+        # Add constrains to each record.
+        # State is listed empty, indicating initial updates. 
+        for record in response:
+            record['constraints'] = {
+              "region":                "US",
+              "supportedCompressions": ["RAW"]
+            }
+
+        request_body = {
+            "client": {
+                "clientId": self.client_id,
+                "clientVersion": self.client_version,
+            },
+            "listUpdateRequests": response,
+        }
+
+        # Fetch all the lists
+        response = self.service.threatListUpdates().fetch(body=request_body).execute()
+        self._set_wait_duration(response.get('minimumWaitDuration'))
+        print(response)
+        return response['listUpdateResponses']
+
+c = SafeBrowsingAPIClient(API_KEY)
+c.dump_database()
+
+""" 
+Example Response of Getting Threat Lists
 {
 'threatLists': [
     {'threatType': 'MALWARE', 'platformType': 'ANY_PLATFORM',
@@ -108,4 +149,7 @@ class SafeBrowsingAPIClient(object):
      'threatEntryType': 'URL'},
     ]
 }
+
+Example Response of Updating Prefixes in Threat Lists:
+
 """
